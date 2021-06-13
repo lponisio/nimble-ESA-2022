@@ -1,0 +1,16 @@
+---
+title: "How to set up for NIMBLE workshop"
+author: "Perry de Valpine"
+date: "6/9/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Information and materials for the NIMBLE workshop Monday afternoon will be available at [https://github.com/nimble-training/nimble-vNCSE-2021](https://github.com/nimble-training/nimble-vNCSE-2021).
+
+Please scroll down on that page for information on installing `nimble`, `nimbleEcology`, `nimbleSCR`, compiler tools, and other packages that will be used in workshop code.  `nimble` requires that standard compiler tools be installed, similar to what is needed for `Rcpp`, for example.  If you don't have these installed already, it is highly recommended that you install them and run the test code so you can resolve any installation problems prior to the workshop. 
+
+All workshop content will be provided as html slides with source code in both Rmd and R format.  The `content` folder will be ready by Monday morning. Instructions for downloading the everything either as a git repository or a zip file are on the information page linked above.
