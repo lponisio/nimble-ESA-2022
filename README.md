@@ -1,14 +1,14 @@
-#  nimble-vNCSE-2021
+#  nimble-ESA-2022
 
-This repository will contain materials for the virtual NIMBLE workshop for the UK National Centre for Statistical Ecology, 14 June 2021, 14:00 - 17:00 UK time (UTC+1).  The online location is set up via the vNCSE meeting.
+This repository will contain materials for the virtual NIMBLE workshop for the [Ecological Forecasting Initiative](https://ecoforecast.org/workshops/statistical-methods-seminar-series/) part of ESA Statistical Ecology chapter.  
 
 To prepare for the workshop:
 
  - Install NIMBLE (see below)
  - Install additional packages (see below)
- - Download these materials.  They should be complete by the morning of 14 June 2021.
+ - Download these materials.  They should be complete by the morning of 18 April 2022.
 
-All materials for the workshop will be in this GitHub repository. If you're familiar with Git/GitHub, you already know how to get all the materials on your computer. If you're not, go [here](https://github.com/nimble-training/nimble-vNCSE-2021), click the (green) "Code" button, and choose the "Download ZIP" option.
+All materials for the workshop will be in this GitHub repository. If you're familiar with Git/GitHub, you already know how to get all the materials on your computer. If you're not, click the (green) "Code" button, and choose the "Download ZIP" option.
 
 This workshop is organized into four modules:
 
