@@ -1,0 +1,332 @@
+---
+title: "Guided Tour of NIMBLE"
+author: "NIMBLE Development Team"
+date: "April 2022"
+output:
+  beamer_presentation: default
+  slidy_presentation: default
+  ioslides_presentation: default
+subtitle: NIMBLE 2022 virtual EFI workshop
+---
+<style>
+slides > slide {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+}
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = TRUE)
+library(nimble)
+library(coda)
+```
+
+# Workshop organization
+
+- 2 modules 
+- 1. Overview of `nimble`. (covered in this workshop)
+- 2. `nimbleEcology` distributions for capture-recapture, occupancy, dynamic occupancy, N-mixture, and Hidden Markov models (multi-state / multi-event capture-recapture). (the main topic of this workskop)
+
+-Bonus modules 
+- 1. CJS capture-recapture model with dipper data
+- 2. Extending models and methods using `nimbleFunction`s for efficiency and generality. (for future reading)
+- 3. Speeding up spatial capture-recapture (`nimbleSCR`). (for future reading)
+
+# What Is NIMBLE?
+
+- A framework for hierarchical statistical models and methods.
+- A nearly drop-in alternative to WinBUGS, OpenBUGS and JAGS.
+- An extension of the BUGS language for:
+
+    - writing new functions and distributions.
+    - named alternative parameterizations (e.g. sd vs precision for `dnorm`).
+    - Additional R-like coding, including vectorized declarations.
+    
+- A configurable system for MCMC.
+- A library of other methods.
+    
+    - Sequential Monte Carlo (particle filtering)
+    - Particle MCMC
+    - Monte Carlo Expectation Maximization (maximum likelihood)
+    - Reversible jump MCMC for variable selection
+    - Special components for Conditional Auto-Regressive (CAR) models (spatial) and Bayesian non-parametric distributions (BNP).
+
+- A model-generic programming system to write new analysis methods using two-stage `nimbleFunction`s.
+- **N**umerical **I**nference for statistical **M**odels using **B**ayesian and **L**ikelihood **E**stimation.
+
+# Assumptions for this workshop
+
+- You are familiar with the BUGS/JAGS model language.
+- You are familiar with occupancy statistical models 
+- The emphasis of this workshop is on the `nimble` and`nimbleEcology` 
+
+
+# First example: Single species, multi season ("dynamic") occupancy model
+
+- Discussed in detail in [Ponisio et al. 2020](https://doi.org/10.1002/ece3.6053)
+- Uses data simulations modified from Kery and Schaub [Bayesian Population Analysis using WinBUGS]( https://www.sciencedirect.com/book/9780123870209/bayesian-population-analysis-using-winbugs)
+- We will parameterize 1) the rates at which species persist in patches in which they already occur and 2) the rates at which species colonize patches in which they don’t occur. Occupancy then emerges as the net outcome of these two processes.
+
+---
+
+#  The data we collect
+
+![](occFigs/recapture-occupancy1.jpg)
+---
+
+#  Possible extinction 
+![](occFigs/recapture-occupancy2.jpg)
+---
+
+#  Observed persistence
+![](occFigs/recapture-occupancy3.jpg)
+---
+
+#  Possible colonization
+![](occFigs/recapture-occupancy4.jpg)
+
+---
+
+# Single species multi season occupancy 
+
+$\mbox{logit}(\psi_{i,j+1}) = \phi_{j} * z_{i,k} + \gamma_{j} * (1-z_{i,j})$.
+
+-  $\psi_{i,j}$ is the occupancy probability at the $i^{\mathrm{th}}$ site in the
+$j^{\mathrm{th}}$ year.
+- $\phi_{j}$ denotes the probability the species persists at a site from years $j$ to $j+1$ (given that $z_{i,j}=1$) 
+- $\gamma_{j}$ denotes the probability that site $i$ is colonized in year $j+1$ (given that $z_{i,j}=0$).
+
+
+---
+
+## Simulate the data 
+- There will be 100 sites sampled 5 times per year for 15 years. (Won't this be lovely?)
+- data, y: 1 = not-detected, 2 = detected.
+- latent states, z: 1 = present, 0 = absent 
+
+=====
+```{r sim_dOcc_data} 
+source("src/setup.R")
+set.seed(444)
+psi1 <- 0.2 ## initial occupancy
+mu.p <- 0.5 ## mean detection
+sigma.p <- 0.02 ## variance in detection
+mu.phi <- rnorm(1) ## mean persistence
+sigma.phi <- 0.02 ## variance in persistence
+mu.gamma <- rnorm(1) ## mean colonization
+sigma.gamma <- 0.02 ## variance in colonization
+
+occ.data <- genDynamicOccData(mu.p=mu.p,
+                              psi1=psi1,
+                              sigma.p=sigma.p,
+                              mu.phi=mu.phi,
+                              sigma.phi=sigma.phi,
+                              mu.gamma=mu.gamma,
+                              sigma.gamma=sigma.gamma)
+names(occ.data)
+```
+
+=====
+```{r data_exploration} 
+dim(occ.data$z)
+head(occ.data$z)
+```
+# Basic nimble workflow
+
+![](nimble_basics.png)
+
+
+```{r dOcc_code}
+dOcc_code <- nimbleCode({
+                ## Specify priors
+                psi1 ~ dunif(0, 1)
+                mu.p  ~ dnorm(0,0.001)
+                sigma.p     ~ dunif(0,100)
+                tau.p <- 1/(sigma.p*sigma.p)
+                mu.phi  ~ dnorm(0,0.001)
+                mu.gamma  ~ dnorm(0,0.001)
+                sigma.phi ~ dunif(0,100)
+                sigma.gamma ~ dunif(0,100)
+                tau.phi <-  1/(sigma.phi*sigma.phi)
+                tau.gamma <-  1/(sigma.gamma*sigma.gamma)
+
+                for(year in 1:(nyear -1)) {
+                    p[year]  ~ dnorm(mu.p,     tau.p) ## detection 
+                    phi[year] ~ dnorm(mu.phi, tau.phi) ## persistence
+                    gamma[year] ~ dnorm(mu.gamma, tau.gamma) ## colonization
+                }
+                p[nyear]      ~ dnorm(mu.p,     tau.p) ## detection in the last year
+
+                ## Ecological submodel: Define state conditional on parameters
+                for (site in 1:nsite){
+                    z[site,1] ~ dbern(psi1)
+                    for (year in 2:nyear){
+                        logit(muZ[site,year]) <- z[site,year-1]*phi[year-1] +
+                            (1-z[site,year-1])*gamma[year-1]
+                        z[site,year] ~ dbern(muZ[site,year])
+                    }
+                }
+
+                ## Observation model
+                for (site in 1:nsite){
+                    for (rep in 1:nrep){
+                        for (year in 1:nyear){
+                            muy[site,rep,year] <- z[site,year]*ilogit(p[year])
+                            y[site,rep,year] ~ dbern(muy[site,rep,year])
+                        }
+                    }
+                }
+            })
+```
+
+# Setup data, constants, and inits
+
+```{r setupInputs}
+
+## data zs with 0s set to NAs
+zs <- apply(occ.data$y, c(1, 3), max, na.rm=TRUE)
+zs[zs == 0] <- NA
+
+## initial conditions, NAs where 1s in z, and 1s are where NA
+zinits <- zs
+zinits[zinits == 1] <- 2
+zinits[is.na(zinits)] <- sample(0:1, sum(is.na(zinits)), replace=TRUE)
+zinits[zinits == 2] <- NA
+
+## constants
+dOcc_constants <- list(nsite = dim(occ.data$y)[1],
+                  nrep = dim(occ.data$y)[2],
+                  nyear = dim(occ.data$y)[3])
+
+## data 
+dOcc_data <- list(y = occ.data$y, z = zs)
+
+## initial conditions
+dOcc_inits <- list(z = zinits,
+                  phi = occ.data$phi,
+                  gamma = occ.data$gamma,
+                  p = occ.data$p,
+                  psi1= occ.data$psi[1],
+                  mu.p = occ.data$mu.p,
+                  sigma.p = occ.data$sigma.p,
+                  mu.phi = occ.data$mu.phi,
+                  sigma.phi = occ.data$sigma.phi,
+                  mu.gamma = occ.data$mu.gamma,
+                  sigma.gamma = occ.data$sigma.gamma)
+```
+
+# What are constants? What are data?
+
+### Constants are values needed to define model relationships
+
+- Index starting/ending values like `N`
+- Constant indexing vectors for indexing data groupings (site, treatment, individual, time): `beta[ treatment[i] ]`.
+- Constants must be provided when creating a model with `nimbleModel`.
+
+### Data represents a flag on the role a node plays in the model
+
+- E.g., data nodes shouldn't be sampled in MCMC.
+- Data *values* can be changed.
+- Data can be provided when calling `nimbleModel` or later.
+
+### Providing data and constants together.
+
+- Data and constants can be provided together **as `constants`**.
+- It would be slightly easier for BUGS/JAGS users to call this "data", but that would blur the concepts.  
+- NIMBLE will usually disambiguate data and constants when they are provided together as `constants`.
+
+### What are covariates and other non-parameters/non-observations?
+
+- Covariates/predictors are neither parameters nor data in the sense of the likelihood.
+- Covariates/predictors can be provided via `constants` if you don't need to change them (often the case).
+- Covariates/predictors can be provided via `data` or `inits` if you want to change them.
+    - NIMBLE will not treat them as 'data nodes'.
+
+# Create a model
+
+```{r nimbleModel, eval = TRUE, echo = TRUE}
+dOcc_model <- nimbleModel(code = dOcc_code,
+                            constants = dOcc_constants,
+                            data = dOcc_data,     # data can be set later.
+                            inits = dOcc_inits  # inits can be set later.
+                            )                      
+```
+```{r nimbleModel_eval}
+dOcc_model$initializeInfo()                    
+```
+# Create an MCMC
+
+```{r configureMCMC, eval=TRUE}
+dOcc_MCMCconf <- configureMCMC(dOcc_model, 
+                                 monitors = c("mu.p", "sigma.p",
+                                              "mu.phi", "sigma.phi", "mu.gamma","sigma.gamma"
+                                  )) # can be skipped if you don't plan to customize
+dOcc_MCMC <- buildMCMC(dOcc_MCMCconf)
+```
+
+# Compile the model and MCMC
+
+## 3. Compile the model and MCMC
+
+```{r compileNimble, eval = TRUE, echo = TRUE, message = TRUE}
+C_dOcc_model <- compileNimble(dOcc_model) # These two lines can be done in one line.
+C_dOcc_MCMC <- compileNimble(dOcc_MCMC, project = dOcc_model)
+```
+
+## 4. Run the MCMC
+
+```{r runMCMC, eval = TRUE, echo = TRUE, message = TRUE}
+samples <- runMCMC(C_dOcc_MCMC, niter = 10000, samplesAsCodaMCMC = TRUE,
+                   nchains=3)
+# Alternative:
+# C_dOcc_MCMC$run(1000)
+# samples <- as.matrix(C_dOcc_MCMC$mvSamples)
+summary(samples)
+plot(samples)
+```
+
+# How can I use the model in R?
+
+```{r nimbleModel2, eval = TRUE, echo = FALSE}
+# Rebuild the model here for safe knitr behavior
+dOcc_model <- nimbleModel(code = dOcc_code,
+                            constants = dOcc_constants,
+                            data = dOcc_data,     # data can be set later.
+                            inits = dOcc_inits  # inits can be set later.
+                            )                       # dimensions is also a useful argument.
+C_dOcc_model <- compileNimble(dOcc_model) 
+```
+
+```{r model_demo, eval=TRUE}
+class(dOcc_model)[1]  # This is a reference class (S5) object
+dOcc_model$gamma           # Look at a model variable,
+dOcc_model$y[1:2,, ]        # or part of one.
+dOcc_model$isData('gamma') # Query what is data
+dOcc_model$getNodeNames()[1:10]  # Query what are the nodes (vertices) in the graph,
+dOcc_model$getDependencies("z[1, 3]") # and what depends on what..
+dOcc_model$calculate()     # Calculate the entire model. Return sum of log probabilities.
+dOcc_model$calculate('z[1, 3]') # Calculate one or more nodes in the model.
+dOcc_model$calculate(dOcc_model$getDependencies('z[1, 3]')) # Calculate based on model structure.
+dOcc_model$simulate("y", includeData = TRUE) # Simulate new data
+head(dOcc_model$y)
+dOcc_model$calculate("y")   # Calculate new sum of log probabilities
+C_dOcc_model$y <- dOcc_model$y # The compiled model can be used in the same way
+C_dOcc_model$calculate()
+```
+
+# Differences from NIMBLE to JAGS and/or BUGS
+
+* See our [guide on converting from JAGS to NIMBLE](https://r-nimble.org/quick-guide-for-converting-from-jags-or-bugs-to-nimble)
+* Wrap your model code in `nimbleCode({})` directly in R.
+* Provide information about missing or empty indices:
+
+   * Use `x[1:n, 1:m]` or
+   * `x[,]` with `dimensions = list(x = c(n,m))`.
+   * Do not use `x` without brackets (unless it is a scalar).
+* Decide how much control you need:
+
+    * `nimbleMCMC` will do everything.
+    * `nimbleModel`, `configureMCMC`, `buildMCMC`, `compileNimble` and `runMCMC` give you more control.
+    
