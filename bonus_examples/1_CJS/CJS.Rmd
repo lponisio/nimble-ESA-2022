@@ -38,7 +38,7 @@ Dipper example:
 Load the data
 =====
 ```{r load_dipper} 
-dipper_example_dir <- file.path("..", "..", "content", "examples","dipper")
+dipper_example_dir <- file.path("..", "..", "bonus_examples", "examples","dipper")
 dipper <- read.csv(file.path(dipper_example_dir,"dipper.csv"))
 y <- as.matrix(dipper[ , 1:7])
 y <- y + 1 # Code as 1 = not captured, 2 = captured.
@@ -75,10 +75,6 @@ dipper_code_dcat <- nimbleCode({
 ```
 
 
-# Basic nimble workflow
-
-![](nimble_basics.png)
-
 # Setup data, constants, and inits
 
 ```{r setupInputs}
@@ -101,60 +97,6 @@ head(dipper_data$z)     # data and inits have comlpementary
 head(dipper_inits()$z)  # NAs 
 ```
 
-# What are constants? What are data?
-
-### Constants are values needed to define model relationships
-
-- Index starting/ending values like `N`
-- Constant indexing vectors for indexing data groupings (site, treatment, individual, time): `beta[ treatment[i] ]`.
-- Constants must be provided when creating a model with `nimbleModel`.
-
-### Data represents a flag on the role a node plays in the model
-
-- E.g., data nodes shouldn't be sampled in MCMC.
-- Data *values* can be changed.
-- Data can be provided when calling `nimbleModel` or later.
-
-### Providing data and constants together.
-
-- Data and constants can be provided together **as `constants`**.
-- It would be slightly easier for BUGS/JAGS users to call this "data", but that would blur the concepts.  
-- NIMBLE will usually disambiguate data and constants when they are provided together as `constants`.
-
-### What are covariates and other non-parameters/non-observations?
-
-- Covariates/predictors are neither parameters nor data in the sense of the likelihood.
-- Covariates/predictors can be provided via `constants` if you don't need to change them (often the case).
-- Covariates/predictors can be provided via `data` or `inits` if you want to change them.
-    - NIMBLE will not treat them as 'data nodes'.
-
-# Constants vs data for nested indexing
-
-When values are grouped (particularly in irregular ways), we often have (potentially complicated) indexing.
-
-Here is a model code snippet from a GLMM for disease occurrence in deer from different farms. 
-
-- `sex` is coded as 1 or 2 to index fixed-effect intercepts.
-- `farm_ids` are coded as 1-24 for random-effect intercepts for data from 24 farms. 
-- Membership indices that are known in advance. 
-- **Provide known indexing vectors in `constants`.**
-- Otherwise `nimble` allows that you (or your model) might change them later, which makes it handle them inefficiently (with unnecessary computation).
-
-```{r, eval=FALSE}
-nimbleCode({
-  # ...incomplete code snippet...
-  for(i in 1:2) sex_int[i] ~ dnorm(0, sd = 1000)  # prior for sex-specific intercepts
-  for(i in 1:num_farms) farm_effect[i] ~ dnorm(0, sd = farm_sd) # priors for farm random effects
-  farm_sd ~ dunif(0, 100)                         # prior for random effect std. dev.
-  for(i in 1:num_animals) {
-    logit(disease_probability[i]) <-              # logit link
-      sex_int[ sex[i] ] +                         # nested indexing of sex-specific intercepts
-      farm_effect[ farm_ids[i] ]                  # nested indexing of farm effects
-    y[i] ~ dbern(disease_probability[i])          # "likelihood"
-  }
-  # ...
-})
-```
   
 # Create a model
 

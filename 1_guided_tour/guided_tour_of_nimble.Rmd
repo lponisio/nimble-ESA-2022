@@ -129,7 +129,7 @@ $j^{\mathrm{th}}$ year.
 ---
 
 ## Simulate the data 
-- There will be 50 sites sampled 5 times per year for 5 years. (Won't this be lovely?)
+- There will be 100 sites sampled 10 times per year for 5 years. (Won't this be lovely?)
 - data, y: 1 = not-detected, 2 = detected.
 - latent states, z: 1 = present, 0 = absent 
 - Simulate a time-constant model with 3 different covariates affecting the 3 parameters (phi, gamma, p)  (use the function from the AHMbook package)
@@ -142,9 +142,9 @@ set.seed(444)
 # simulate a time-constant model with 3 different covariates affecting the 3 parameters (phi, gamma, p)
 
 occ.data <- AHMbook::simDynocc(
-  nsites = 50,
+  nsites = 100,
   nyears = 5,
-  nsurveys = 5,
+  nsurveys = 10,
   mean.psi1 = 0.6, # average occupancy probability in first year
   beta.Xpsi1 = 0, # coefficient of environ covariate in p(initial occupancy).
   range.phi = c(0.6, 0.6), # bounds of uniform distribution from which annual p(persistence) is randomly drawn.
@@ -335,7 +335,7 @@ C_dOcc_MCMC <- compileNimble(dOcc_MCMC, project = dOcc_model)
 ## 4. Run the MCMC
 
 ```{r runMCMC, eval = TRUE, echo = TRUE, message = TRUE}
-samples <- runMCMC(C_dOcc_MCMC, niter = 100000, 
+samples <- runMCMC(C_dOcc_MCMC, niter = 10000, 
                    samplesAsCodaMCMC = TRUE,
                    nchains=3,
                    nburnin=1000)
