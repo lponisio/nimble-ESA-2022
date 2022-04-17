@@ -10,12 +10,16 @@ To prepare for the workshop:
 
 All materials for the workshop will be in this GitHub repository. If you're familiar with Git/GitHub, you already know how to get all the materials on your computer. If you're not, click the (green) "Code" button, and choose the "Download ZIP" option.
 
-This workshop is organized into four modules:
+This workshop is organized into modules:
 
-1. Overview of `nimble` using a capture-recapture example
-2. Extending models and methods in NIMBLE.
-3. Overview of `nimbleEcology` with a worked hidden Markov model (HMM) example.
-4. Introduction to `nimbleSCR` for spatial capture-recapture, with a worked example.
+- Presented modules 
+- 1. Overview of `nimble`, intro to Hidden Markov models, fitting a dynamic occypancy model. 
+- 2. `nimbleEcology` distributions for capture-recapture, occupancy, dynamic occupancy
+
+- Bonus modules 
+- 1. CJS capture-recapture model with dipper data
+- 2. Extending models and methods using `nimbleFunction`s for efficiency and generality. 
+- 3. Speeding up spatial capture-recapture (`nimbleSCR`).
 
 ## Background for the workshop
 
