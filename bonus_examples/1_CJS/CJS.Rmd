@@ -1,12 +1,16 @@
 ---
 title: "CJS in NIMBLE"
+subtitle: "NIMBLE 2022 virtual EFI workshop"
 author: "NIMBLE Development Team"
 date: "April 2022"
+
 output:
-  slidy_presentation: default
-  beamer_presentation: default
-  ioslides_presentation: default
-subtitle: NIMBLE 2022 virtual EFI workshop
+revealjs::revealjs_presentation:
+transition: default
+self_contained: false
+center: true
+mathjax: NULL
+
 ---
 <style>
 slides > slide {
@@ -311,18 +315,3 @@ dipper_MCMCconf$printSamplers("phi")
 
     * Behavior is not always identical but is close.
     * Example: Error trapping will behave differently.  Errors in C++ might not occur in R.
-
-# Differences from NIMBLE to JAGS and/or BUGS
-
-* See our [guide on converting from JAGS to NIMBLE](https://r-nimble.org/quick-guide-for-converting-from-jags-or-bugs-to-nimble)
-* Wrap your model code in `nimbleCode({})` directly in R.
-* Provide information about missing or empty indices:
-
-   * Use `x[1:n, 1:m]` or
-   * `x[,]` with `dimensions = list(x = c(n,m))`.
-   * Do not use `x` without brackets (unless it is a scalar).
-* Decide how much control you need:
-
-    * `nimbleMCMC` will do everything.
-    * `nimbleModel`, `configureMCMC`, `buildMCMC`, `compileNimble` and `runMCMC` give you more control.
-    
