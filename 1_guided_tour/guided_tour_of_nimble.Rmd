@@ -2,11 +2,16 @@
 title: "Guided Tour of NIMBLE"
 author: "NIMBLE Development Team"
 date: "April 2022"
+subtitle: "NIMBLE 2022 virtual EFI workshop"
+
 output:
-  beamer_presentation: default
-  slidy_presentation: default
-  ioslides_presentation: default
-subtitle: NIMBLE 2022 virtual EFI workshop
+revealjs::revealjs_presentation:
+transition: default
+self_contained: false
+center: true
+mathjax: NULL
+
+
 ---
 <style>
 slides > slide {
@@ -25,17 +30,17 @@ library(coda)
 
 # Workshop organization
 
-- 2 modules 
-- 1. Overview of `nimble`. (covered in this workshop)
-- 2. `nimbleEcology` distributions for capture-recapture, occupancy, dynamic occupancy, N-mixture, and Hidden Markov models (multi-state / multi-event capture-recapture). (the main topic of this workskop)
+- Today's modules 
+- 1. Overview of `nimble`, intro to Hidden Markov models, fitting a dynamic occypancy model. 
+- 2. `nimbleEcology` distributions for capture-recapture, occupancy, dynamic occupancy
 
--Bonus modules 
+- Bonus modules 
 - 1. CJS capture-recapture model with dipper data
-- 2. Extending models and methods using `nimbleFunction`s for efficiency and generality. (for future reading)
-- 3. Speeding up spatial capture-recapture (`nimbleSCR`). (for future reading)
+- 2. Extending models and methods using `nimbleFunction`s for efficiency and generality. 
+- 3. Speeding up spatial capture-recapture (`nimbleSCR`).
 
 # What Is NIMBLE?
-
+- **N**umerical **I**nference for statistical **M**odels using **B**ayesian and **L**ikelihood **E**stimation.
 - A framework for hierarchical statistical models and methods.
 - A nearly drop-in alternative to WinBUGS, OpenBUGS and JAGS.
 - An extension of the BUGS language for:
@@ -45,16 +50,15 @@ library(coda)
     - Additional R-like coding, including vectorized declarations.
     
 - A configurable system for MCMC.
+
 - A library of other methods.
-    
-    - Sequential Monte Carlo (particle filtering)
-    - Particle MCMC
-    - Monte Carlo Expectation Maximization (maximum likelihood)
-    - Reversible jump MCMC for variable selection
-    - Special components for Conditional Auto-Regressive (CAR) models (spatial) and Bayesian non-parametric distributions (BNP).
+  - Sequential Monte Carlo (particle filtering)
+  - Particle MCMC
+  - Monte Carlo Expectation Maximization (maximum likelihood)
+  - Reversible jump MCMC for variable selection
+  - Special components for Conditional Auto-Regressive (CAR) models (spatial) and Bayesian non-parametric distributions (BNP).
 
 - A model-generic programming system to write new analysis methods using two-stage `nimbleFunction`s.
-- **N**umerical **I**nference for statistical **M**odels using **B**ayesian and **L**ikelihood **E**stimation.
 
 # Assumptions for this workshop
 
@@ -62,16 +66,39 @@ library(coda)
 - You are familiar with occupancy statistical models 
 - The emphasis of this workshop is on the `nimble` and`nimbleEcology` 
 
+Hidden Markov models (Intro)
+---
 
-# First example: Single species, multi season ("dynamic") occupancy model
+Hidden Markov models (HMMs) are a general statistical framework for:
 
-- Discussed in detail in [Ponisio et al. 2020](https://doi.org/10.1002/ece3.6053)
-- Uses data simulations modified from Kery and Schaub [Bayesian Population Analysis using WinBUGS]( https://www.sciencedirect.com/book/9780123870209/bayesian-population-analysis-using-winbugs)
+- systems with discrete latent states (usually) and discrete time steps
+
+    * probabilities of transitioning between states at each time step
+
+- discrete observation categories and imperfect observation 
+    
+    *  probabilities of being observed in one category given the (true) latent state.
+
+- If transition and/or observation probabilities are time-dependent, we call it a "Dynamic HMM" (DHMM).
+
+---
+
+# Hidden Markov models in site occupancy models
+
+- latent states are the presence or absence of a species at discrete spatial locations
+- observed states are imperfect because the probability of detection != 1
+- repeat samples at a spatial location enable the estimate of the latent states
+
+---
+
+# HMM example: Single species, multi season ("dynamic") occupancy model
+
+- Uses data simulations from Kery and Schaub [Bayesian Population Analysis using WinBUGS]( https://www.sciencedirect.com/book/9780123870209/bayesian-population-analysis-using-winbugs)
 - We will parameterize 1) the rates at which species persist in patches in which they already occur and 2) the rates at which species colonize patches in which they don’t occur. Occupancy then emerges as the net outcome of these two processes.
 
 ---
 
-#  The data we collect
+#  The data we collect (y)
 
 ![](occFigs/recapture-occupancy1.jpg)
 ---
@@ -102,84 +129,97 @@ $j^{\mathrm{th}}$ year.
 ---
 
 ## Simulate the data 
-- There will be 100 sites sampled 5 times per year for 15 years. (Won't this be lovely?)
+- There will be 50 sites sampled 5 times per year for 5 years. (Won't this be lovely?)
 - data, y: 1 = not-detected, 2 = detected.
 - latent states, z: 1 = present, 0 = absent 
+- Simulate a time-constant model with 3 different covariates affecting the 3 parameters (phi, gamma, p)  (use the function from the AHMbook package)
 
-=====
+---
+
 ```{r sim_dOcc_data} 
-source("src/setup.R")
 set.seed(444)
-psi1 <- 0.2 ## initial occupancy
-mu.p <- 0.5 ## mean detection
-sigma.p <- 0.02 ## variance in detection
-mu.phi <- rnorm(1) ## mean persistence
-sigma.phi <- 0.02 ## variance in persistence
-mu.gamma <- rnorm(1) ## mean colonization
-sigma.gamma <- 0.02 ## variance in colonization
 
-occ.data <- genDynamicOccData(mu.p=mu.p,
-                              psi1=psi1,
-                              sigma.p=sigma.p,
-                              mu.phi=mu.phi,
-                              sigma.phi=sigma.phi,
-                              mu.gamma=mu.gamma,
-                              sigma.gamma=sigma.gamma)
+# simulate a time-constant model with 3 different covariates affecting the 3 parameters (phi, gamma, p)
+
+occ.data <- AHMbook::simDynocc(
+  nsites = 50,
+  nyears = 5,
+  nsurveys = 5,
+  mean.psi1 = 0.6, # average occupancy probability in first year
+  beta.Xpsi1 = 0, # coefficient of environ covariate in p(initial occupancy).
+  range.phi = c(0.6, 0.6), # bounds of uniform distribution from which annual p(persistence) is randomly drawn.
+  beta.Xphi = 2, # coefficients of environ covariate in p(persistence).
+  range.gamma = c(0.3, 0.3), # bounds of uniform distribution from which annual p(colonization) is randomly drawn.
+  beta.Xgamma = 2, # coefficient of environmental covariate in p(colonization).
+  range.p = c(0.5, 0.5), # bounds of uniform distribution from which annual p(detection) is randomly drawn.
+  beta.Xp = -2, # coefficient of environmental covariate in p(detection).
+  show.plot = TRUE)
+
 names(occ.data)
 ```
 
-=====
+---
+
 ```{r data_exploration} 
 dim(occ.data$z)
 head(occ.data$z)
 ```
+
+---
+
 # Basic nimble workflow
 
 ![](nimble_basics.png)
 
+---
 
 ```{r dOcc_code}
 dOcc_code <- nimbleCode({
-                ## Specify priors
-                psi1 ~ dunif(0, 1)
-                mu.p  ~ dnorm(0,0.001)
-                sigma.p     ~ dunif(0,100)
-                tau.p <- 1/(sigma.p*sigma.p)
-                mu.phi  ~ dnorm(0,0.001)
-                mu.gamma  ~ dnorm(0,0.001)
-                sigma.phi ~ dunif(0,100)
-                sigma.gamma ~ dunif(0,100)
-                tau.phi <-  1/(sigma.phi*sigma.phi)
-                tau.gamma <-  1/(sigma.gamma*sigma.gamma)
+  for (site in 1:nsite) {
+    for (year in 1:nyear) {
 
-                for(year in 1:(nyear -1)) {
-                    p[year]  ~ dnorm(mu.p,     tau.p) ## detection 
-                    phi[year] ~ dnorm(mu.phi, tau.phi) ## persistence
-                    gamma[year] ~ dnorm(mu.gamma, tau.gamma) ## colonization
-                }
-                p[nyear]      ~ dnorm(mu.p,     tau.p) ## detection in the last year
+      ## persistence 
+      logit(phi[site, year]) <- beta[1] + beta[2] * Xphi[site, year]
+      
+      ## colonization
+      logit(gamma[site, year]) <- beta[3] + beta[4] * Xgamma[site, year]
 
-                ## Ecological submodel: Define state conditional on parameters
-                for (site in 1:nsite){
-                    z[site,1] ~ dbern(psi1)
-                    for (year in 2:nyear){
-                        logit(muZ[site,year]) <- z[site,year-1]*phi[year-1] +
-                            (1-z[site,year-1])*gamma[year-1]
-                        z[site,year] ~ dbern(muZ[site,year])
-                    }
-                }
+      ## detection
+      for (survey in 1:nsurvey) {
+        logit(p[site, survey, year]) <- beta[5] + beta[6] * Xp[site, survey, year]
+      }
+    }
 
-                ## Observation model
-                for (site in 1:nsite){
-                    for (rep in 1:nrep){
-                        for (year in 1:nyear){
-                            muy[site,rep,year] <- z[site,year]*ilogit(p[year])
-                            y[site,rep,year] ~ dbern(muy[site,rep,year])
-                        }
-                    }
-                }
-            })
+  }
+
+  ## Ecological submodel: Define state conditional on parameters
+  for (site in 1:nsite){
+    z[site,1] ~ dbern(psi1)
+    for (year in 2:nyear){
+      logit(muZ[site, year]) <- z[site,year-1]*phi[site, year-1] +
+        (1-z[site, year-1])*gamma[site, year-1]
+      z[site, year] ~ dbern(muZ[site, year])
+    }
+    }
+  ## Observation model
+  for (site in 1:nsite){
+    for (survey in 1:nsurvey){
+      for (year in 1:nyear){
+        muy[site,survey,year] <- z[site,year]*ilogit(p[site, survey, year])
+        y[site,survey,year] ~ dbern(muy[site,survey,year])
+      }
+    }
+  }
+  
+    # priors
+  psi1 ~ dunif(0, 1)
+  for (i in 1:6) {
+    beta[i] ~ dnorm(0, 1.0e-2)
+  }
+  })
 ```
+
+---
 
 # Setup data, constants, and inits
 
@@ -192,30 +232,45 @@ zs[zs == 0] <- NA
 ## initial conditions, NAs where 1s in z, and 1s are where NA
 zinits <- zs
 zinits[zinits == 1] <- 2
-zinits[is.na(zinits)] <- sample(0:1, sum(is.na(zinits)), replace=TRUE)
+zinits[is.na(zinits)] <- sample(0:1, sum(is.na(zinits)), 
+                                replace=TRUE) ## random 1,0 for unobserved
 zinits[zinits == 2] <- NA
 
+head(zinits)
+head(zs)
+```
+
+---
+
+## Compare z an z inits
+
+- Where a species was detected, a 1 is provided in the data. There is no need to set up a sampler to sample this node. This would be wasted computation.
+- The same nodes in the inits get an NA because there is no reason to have a initial condition for a node you will not sample
+-Where it wasn't detected, NA is provided in the data so nimble knows to sample that note as a latent state 
+
+---
+
+```{r setupInputs2}
 ## constants
-dOcc_constants <- list(nsite = dim(occ.data$y)[1],
-                  nrep = dim(occ.data$y)[2],
-                  nyear = dim(occ.data$y)[3])
+
+dOcc_constants <- list(nsite = occ.data$nsites,
+                  nsurvey = occ.data$nsurveys,
+                  nyear = occ.data$nyears)
 
 ## data 
-dOcc_data <- list(y = occ.data$y, z = zs)
+dOcc_data <- list(y = occ.data$y,
+                  z = zs,
+                  Xphi = occ.data$Xphi,
+                  Xgamma = occ.data$Xgamma,
+                  Xp = occ.data$Xp)
 
 ## initial conditions
 dOcc_inits <- list(z = zinits,
-                  phi = occ.data$phi,
-                  gamma = occ.data$gamma,
-                  p = occ.data$p,
-                  psi1= occ.data$psi[1],
-                  mu.p = occ.data$mu.p,
-                  sigma.p = occ.data$sigma.p,
-                  mu.phi = occ.data$mu.phi,
-                  sigma.phi = occ.data$sigma.phi,
-                  mu.gamma = occ.data$mu.gamma,
-                  sigma.gamma = occ.data$sigma.gamma)
+                  psi1 = runif(1, 0, 1),
+                  beta = runif(6, -4, 4))
 ```
+
+---
 
 # What are constants? What are data?
 
@@ -242,27 +297,29 @@ dOcc_inits <- list(z = zinits,
 - Covariates/predictors are neither parameters nor data in the sense of the likelihood.
 - Covariates/predictors can be provided via `constants` if you don't need to change them (often the case).
 - Covariates/predictors can be provided via `data` or `inits` if you want to change them.
-    - NIMBLE will not treat them as 'data nodes'.
+  - NIMBLE will not treat them as 'data nodes'.
+
+---
 
 # Create a model
 
 ```{r nimbleModel, eval = TRUE, echo = TRUE}
 dOcc_model <- nimbleModel(code = dOcc_code,
-                            constants = dOcc_constants,
-                            data = dOcc_data,     # data can be set later.
-                            inits = dOcc_inits  # inits can be set later.
-                            )                      
+                          constants = dOcc_constants,
+                          data = dOcc_data,     # data can be set later.
+                          inits = dOcc_inits  # inits can be set later.
+                          )                      
 ```
 ```{r nimbleModel_eval}
 dOcc_model$initializeInfo()                    
 ```
+
+---
+
 # Create an MCMC
 
 ```{r configureMCMC, eval=TRUE}
-dOcc_MCMCconf <- configureMCMC(dOcc_model, 
-                                 monitors = c("mu.p", "sigma.p",
-                                              "mu.phi", "sigma.phi", "mu.gamma","sigma.gamma"
-                                  )) # can be skipped if you don't plan to customize
+dOcc_MCMCconf <- configureMCMC(dOcc_model) # defaults to top-level parameters  
 dOcc_MCMC <- buildMCMC(dOcc_MCMCconf)
 ```
 
@@ -278,8 +335,10 @@ C_dOcc_MCMC <- compileNimble(dOcc_MCMC, project = dOcc_model)
 ## 4. Run the MCMC
 
 ```{r runMCMC, eval = TRUE, echo = TRUE, message = TRUE}
-samples <- runMCMC(C_dOcc_MCMC, niter = 10000, samplesAsCodaMCMC = TRUE,
-                   nchains=3)
+samples <- runMCMC(C_dOcc_MCMC, niter = 100000, 
+                   samplesAsCodaMCMC = TRUE,
+                   nchains=3,
+                   nburnin=1000)
 # Alternative:
 # C_dOcc_MCMC$run(1000)
 # samples <- as.matrix(C_dOcc_MCMC$mvSamples)
@@ -291,12 +350,12 @@ plot(samples)
 
 ```{r nimbleModel2, eval = TRUE, echo = FALSE}
 # Rebuild the model here for safe knitr behavior
-dOcc_model <- nimbleModel(code = dOcc_code,
-                            constants = dOcc_constants,
-                            data = dOcc_data,     # data can be set later.
-                            inits = dOcc_inits  # inits can be set later.
-                            )                       # dimensions is also a useful argument.
-C_dOcc_model <- compileNimble(dOcc_model) 
+#dOcc_model <- nimbleModel(code = dOcc_code,
+#                            constants = dOcc_constants,
+#                            data = dOcc_data,     # data can be set later.
+#                            inits = dOcc_inits  # inits can be set later.
+#                            )                        
+# C_dOcc_model <- compileNimble(dOcc_model) 
 ```
 
 ```{r model_demo, eval=TRUE}
